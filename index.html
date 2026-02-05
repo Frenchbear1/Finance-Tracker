@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Finance Tracker — Local</title>
+  <style>
+    :root{
+      --bg: #f5f5f7;
+      --card: #ffffff;
+      --text: #111111;
+      --muted:#6b7280;
+      --accent:#0a84ff; /* iOS blue */
+      --accent-2:#34c759; /* iOS green */
+      --red:#ff3b30;
+      --ring: rgba(10,132,255,0.35);
+      --shadow: 0 8px 30px rgba(0,0,0,0.06);
+      --radius: 20px;
+    }
+    @media (prefers-color-scheme: dark){
+      :root{
+        --bg:#0c0c0e; --card:#1c1c1e; --text:#f5f5f7; --muted:#a1a1aa; --shadow: 0 8px 30px rgba(0,0,0,0.35);
+      }
+    }
+    html,body{height:100%}
+    body{margin:0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Segoe UI, Roboto, Helvetica, Arial, sans-serif; background:var(--bg); color:var(--text);}
+    .wrap{max-width: 980px; margin: 0 auto; padding: 16px; padding-bottom: calc(100px + env(safe-area-inset-bottom));}
+    header{position: sticky; top:0; z-index: 10; background: linear-gradient(180deg, var(--bg), color-mix(in oklab, var(--bg) 70%, transparent)); padding: 16px; backdrop-filter: saturate(180%) blur(12px);}
+    .title{font-weight: 700; font-size: 24px; letter-spacing: -0.02em}
+    .sub{color:var(--muted); font-size: 13px}
+
+    /* Summary row */
+    .summary{
+      display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; margin-top: 6px;
+    }
+    .pill{display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:999px; background:var(--card); box-shadow: var(--shadow); border: 1px solid color-mix(in oklab, var(--card) 85%, #000 15%)}
+    .pill .dot{width:8px; height:8px; border-radius:50%}
+
+    /* Accounts */
+    .accounts{display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 14px}
+    .acc-card{background: var(--card); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); border: 1px solid color-mix(in oklab, var(--card) 85%, #000 15%); position: relative}
+    .acc-name{font-weight: 600; font-size: 15px}
+    .acc-balance{font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 700; margin-top: 6px}
+    .acc-actions{position:absolute; right:10px; top:10px; display:flex; gap:8px}
+    .icon-btn{appearance:none; border:0; background:transparent; color:var(--muted); padding:6px; border-radius:10px; cursor:pointer}
+    .icon-btn:hover{background: color-mix(in oklab, var(--card) 80%, #000 20%)}
+
+    /* Controls toggle */
+    .controls{margin-top: 18px}
+    .controls .row{display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 8px}
+    @media (max-width: 720px){
+      .controls .row{grid-template-columns: 1fr}
+    }
+    .seg{display:inline-flex; background:var(--card); border:1px solid color-mix(in oklab, var(--card) 85%, #000 15%); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow)}
+    .seg input{display:none}
+    .seg label{padding:8px 12px; font-size:13px; cursor:pointer}
+    .seg input:checked + label{background: color-mix(in oklab, var(--accent) 15%, var(--card)); color: var(--text)}
+
+input[type="text"], input[type="number"], input[type="date"], select, textarea{
+  width:100%;
+  box-sizing:border-box;
+  background:var(--card);
+  color:var(--text);
+  border:1px solid color-mix(in oklab, var(--card) 80%, #000 20%);
+  border-radius: 12px;
+  padding: 10px 12px;
+  outline: none;
+  box-shadow: var(--shadow);
+  font-size: 16px;       /* prevents iOS zoom */
+  line-height: 1.2;      /* keeps text comfy inside taller fields */
+  min-height: 42px;      /* avoids short fields touching neighbors */
+}
+
+    textarea{min-height: 70px; resize: vertical}
+    .btn{appearance:none; border:0; background:var(--accent); color:white; font-weight:600; padding:10px 14px; border-radius:12px; cursor:pointer; box-shadow: var(--shadow)}
+    .btn.ghost{background: transparent; color: var(--accent); border: 1px solid var(--accent)}
+    .btn.red{background: var(--red)}
+    .btn.gray{background: color-mix(in oklab, var(--card) 85%, #000 15%); color: var(--text)}
+
+    /* Transactions */
+    .list{margin-top: 10px; background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); border:1px solid color-mix(in oklab, var(--card) 85%, #000 15%)}
+    .tx{display:grid; grid-template-columns: 1fr auto; gap: 10px; padding: 12px 14px; border-top:1px solid color-mix(in oklab, var(--card) 85%, #000 15%)}
+    .tx:first-child{border-top:0}
+    .tx-title{font-weight:600}
+    .tx-meta{font-size:12px; color: var(--muted)}
+    .amount{font-variant-numeric: tabular-nums; font-weight:700}
+    .amount.pos{color: var(--accent-2)}
+    .amount.neg{color: var(--red)}
+
+    /* Floating add button */
+.fab{
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(12px + env(safe-area-inset-bottom) + var(--fab-toolbar, 0px) + var(--fab-extra, 0px));
+  z-index: 60;
+  display:flex; align-items:center; gap:10px;
+  padding: 12px 14px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: var(--shadow);
+}
+
+    .fab .plus{display:inline-flex; width:28px; height:28px; border-radius: 50%; background: rgba(255,255,255,0.2); align-items:center; justify-content:center}
+.fab:active{transform: translateX(-50%) translateY(1px)}
+
+    /* Dialogs */
+    dialog{border:0; padding:0; border-radius: 18px; width:min(560px, 92vw); background: var(--card); color: var(--text); box-shadow: var(--shadow)}
+    dialog::backdrop{background: rgba(0,0,0,0.35); backdrop-filter: blur(4px)}
+    .dlg{padding: 14px}
+    .dlg h3{margin: 6px 0 12px; font-size: 18px}
+.grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;             /* was too tight at 8–10px */
+}
+    .dlg .actions{display:flex; gap:8px; justify-content:flex-end; margin-top: 12px}
+/* Consistent vertical spacing between stacked rows */
+.grid + .grid { margin-top: 10px; }
+
+/* Tidy single-line inline rows like the Repeat checkbox wrapper */
+.row-inline { margin-top: 10px; }
+
+    .toggle{display:inline-grid; grid-auto-flow: column; gap:6px; background: color-mix(in oklab, var(--card) 90%, #000 10%); padding:4px; border-radius: 12px}
+    .toggle button{border:0; padding: 6px 10px; border-radius:10px; background: transparent; color:var(--text); cursor: pointer}
+    .toggle button.active{background: var(--accent); color:white}
+
+    .muted{color: var(--muted)}
+    .sr{position:absolute; width:1px; height:1px; clip:rect(0 0 0 0); overflow:hidden}
+    /* --- Fix black focus ring / tap highlight on iOS --- */
+* { -webkit-tap-highlight-color: transparent; }
+button { outline: none; }
+button:focus, button:focus-visible { outline: none; }
+
+.fab{
+  border: none;              /* ensure no border ring */
+  outline: none;             /* suppress focus ring */
+}
+.fab:focus-visible{
+  box-shadow: var(--shadow); /* keep subtle shadow only */
+}
+.fab .plus{
+  box-shadow: none;          /* ensure inner circle has no ring */
+  border: none;
+}
+/* === Budgets === */
+.budgets{margin-top:12px; display:flex; flex-wrap:wrap; gap:8px}
+.budget-pill{
+  display:inline-flex; align-items:center; gap:8px;
+  background: var(--card); border:1px solid color-mix(in oklab, var(--card) 85%, #000 15%);
+  border-radius: 999px; padding:8px 12px; box-shadow: var(--shadow);
+  font-size: 13px;
+}
+.budget-pill .bar{width:80px; height:6px; border-radius:999px; background: color-mix(in oklab, var(--card) 70%, #000 30%); overflow:hidden}
+.budget-pill .bar > span{display:block; height:100%}
+
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title">Finance Tracker</div>
+    <div class="summary">
+      <div class="pill" id="totalPill"><span class="dot" style="background:var(--accent-2)"></span> Total Balance <strong id="totalBalance" style="margin-left:6px">$0.00</strong></div>
+      <button class="pill" id="toggleControls">Filters ▾</button>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <section>
+      <div class="accounts" id="accounts"></div>
+      <div style="margin-top:10px; display:flex; gap:8px">
+        <button class="btn gray" id="addAccountBtn">Add Account</button>
+        <button class="btn ghost" id="addBudgetBtn" title="Create and manage budgets">Budget</button>
+        <button class="btn ghost" id="exportBtn" title="Backup data to a JSON you can save">Export</button>
+        <input id="importFile" type="file" accept="application/json" style="display:none" />
+        <button class="btn ghost" id="importBtn" title="Restore from a previous backup">Import</button>
+      </div>
+      <div class="budgets" id="budgets"></div>
+    </section>
+
+    <section class="controls" id="controls" style="display:none">
+      <div class="row">
+        <input type="text" id="search" placeholder="Search title or notes…" />
+        <select id="filterType">
+          <option value="">All types</option>
+          <option value="income">Income</option>
+          <option value="expense">Expense</option>
+        </select>
+        <select id="filterAccount"><option value="">All accounts</option></select>
+      </div>
+      <div class="row">
+        <input type="date" id="fromDate" />
+        <input type="date" id="toDate" />
+        <select id="sortBy">
+          <option value="date_desc">Sort: Newest first</option>
+          <option value="date_asc">Sort: Oldest first</option>
+          <option value="amt_desc">Sort: Amount ↓</option>
+          <option value="amt_asc">Sort: Amount ↑</option>
+          <option value="title_asc">Sort: Title A→Z</option>
+          <option value="title_desc">Sort: Title Z→A</option>
+        </select>
+      </div>
+    </section>
+
+    <section style="margin-top:16px">
+      <div class="list" id="txList"></div>
+    </section>
+  </div>
+
+  <!-- Floating add button -->
+  <button class="fab" id="addTxBtn" aria-haspopup="dialog"><span class="plus">＋</span> Add</button>
+
+  <!-- Add/Edit Account Dialog -->
+  <dialog id="dlgAccount">
+    <form method="dialog" class="dlg" id="accountForm">
+      <h3 id="accDlgTitle">Add Account</h3>
+      <div class="grid">
+        <div>
+          <label>Account name<input type="text" id="accName" required /></label>
+        </div>
+        <div>
+          <label>Starting amount<input type="number" id="accStart" inputmode="decimal" step="0.01" placeholder="0.00" /></label>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn gray" type="button" onclick="dlgAccount.close()">Cancel</button>
+        <button class="btn" id="saveAccount">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Add/Edit Budget Dialog -->
+<dialog id="dlgBudget">
+  <form method="dialog" class="dlg" id="budgetForm">
+    <h3 id="budgetDlgTitle">Add Budget</h3>
+
+    <div class="grid">
+      <div>
+        <label>Budget name
+          <input type="text" id="bdgName" required />
+        </label>
+      </div>
+      <div>
+        <label>Period
+          <select id="bdgPeriod">
+            <option value="monthly" selected>Monthly</option>
+            <option value="weekly">Weekly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div>
+        <label>Mode
+          <select id="bdgMode">
+            <option value="amount" selected>Fixed amount</option>
+            <option value="percent">Percent of income</option>
+          </select>
+        </label>
+      </div>
+      <div>
+        <label id="bdgAmountWrap">Amount
+          <input type="number" id="bdgAmount" inputmode="decimal" step="0.01" placeholder="0.00" />
+        </label>
+        <label id="bdgPercentWrap" style="display:none">Percent (% of income)
+          <input type="number" id="bdgPercent" inputmode="decimal" step="0.01" placeholder="10" />
+        </label>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn gray" type="button" onclick="dlgBudget.close()">Cancel</button>
+      <button class="btn" id="saveBudget">Save</button>
+    </div>
+  </form>
+</dialog>
+
+  <!-- Add/Edit Transaction Dialog -->
+  <dialog id="dlgTx">
+    <form method="dialog" class="dlg" id="txForm">
+      <h3 id="txDlgTitle">Add Entry</h3>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px">
+        <div class="toggle" role="tablist" aria-label="Type">
+          <button type="button" class="active" id="tabExpense">Expense</button>
+          <button type="button" id="tabIncome">Income</button>
+        </div>
+      </div>
+      <div class="grid">
+        <div>
+          <label>Title<input type="text" id="txTitle" required /></label>
+        </div>
+        <div>
+          <label>Amount<input type="number" id="txAmount" inputmode="decimal" step="0.01" placeholder="0.00" required /></label>
+        </div>
+      </div>
+      <div class="grid">
+        <div>
+          <label>Date<input type="date" id="txDate" required /></label>
+        </div>
+        <div>
+          <label>Account<select id="txAccount" required></select></label>
+        </div>
+      </div>
+      <div>
+        <label>Notes<textarea id="txNotes" placeholder="Optional"></textarea></label>
+      </div>
+      <!-- Recurring controls -->
+        <div class="row-inline">
+        <label style="display:flex; align-items:center; gap:8px">
+            <input type="checkbox" id="txRepeat" />
+            <span>Repeat</span>
+        </label>
+        </div>
+
+        <div id="repeatRow" class="grid" style="display:none">
+        <div>
+            <label>Frequency
+            <select id="txFreq">
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly" selected>Monthly</option>
+            </select>
+            </label>
+        </div>
+        <div>
+            <label>Every
+            <input type="number" id="txInterval" min="1" step="1" value="1" />
+            </label>
+        </div>
+        </div>
+
+        <div id="repeatEndRow" class="grid" style="display:none">
+        <div>
+            <label>Ends
+            <select id="txEndMode">
+                <option value="never" selected>Never</option>
+                <option value="after">After # times</option>
+                <option value="on">On date</option>
+            </select>
+            </label>
+        </div>
+        <div>
+            <label id="txEndCountWrap" style="display:none">Occurrences
+            <input type="number" id="txEndCount" min="1" step="1" value="12" />
+            </label>
+            <label id="txEndDateWrap" style="display:none">End date
+            <input type="date" id="txEndDate" />
+            </label>
+        </div>
+        </div>
+
+        
+        <div id="txBudgetRow" class="grid" style="display:none">
+        <div>
+            <label>Budget (optional)
+            <select id="txBudget"></select>
+            </label>
+        </div>
+        </div>
+
+      <div class="actions">
+        <button class="btn red" id="deleteTxBtn" style="display:none" type="button">Delete</button>
+          <button class="btn gray" value="cancel" type="button" onclick="dlgTx.close()">Cancel</button>
+        <button class="btn" id="saveTx">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+  // =============================
+  // Local state & persistence
+  // =============================
+  const state = {
+    accounts: [], // {id, name, start}
+    tx: [],        // {id, type, title, amount, dateISO, accountId, notes}
+    recurring: [],// {id, template:{type,title,amount,accountId,notes}, startISO, rule:{freq,interval}, end:{mode,count?,untilISO?}, nextISO, createdCount}
+    budgets: [],   // {id, name, period:'monthly'|'weekly'|'yearly', mode:'amount'|'percent', amount?, percent?}
+    lastAutoRunISO: '' // last date we generated through
+  };
+  let editingAccId = null;
+  let editingTxId = null;
+
+  const els = {
+    accounts: document.getElementById('accounts'),
+    txList: document.getElementById('txList'),
+    filterAccount: document.getElementById('filterAccount'),
+    totalBalance: document.getElementById('totalBalance'),
+  };
+
+  const STORAGE_KEY = 'finetracker:v1';
+
+  function saveState(){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+  function loadState(){
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return;
+    try{
+      const data = JSON.parse(raw);
+      if(Array.isArray(data.accounts)) state.accounts = data.accounts;
+      if(Array.isArray(data.tx)) state.tx = data.tx;
+      if(Array.isArray(data.budgets)) state.budgets = data.budgets;
+      if(Array.isArray(data.recurring)) state.recurring = data.recurring;
+      if(typeof data.lastAutoRunISO === 'string') state.lastAutoRunISO = data.lastAutoRunISO;
+    }catch(e){ console.warn('Bad local data', e); }
+  }
+  function uid(){ return Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
+
+  // =============================
+  // Derived values
+  // =============================
+  function sumAccountBalance(accId){
+    const acc = state.accounts.find(a=>a.id===accId); if(!acc) return 0;
+    const base = Number(acc.start||0);
+    let delta = 0;
+    for(const t of state.tx){
+      if(t.accountId!==accId) continue;
+      delta += (t.type==='income'? 1 : -1) * Number(t.amount||0);
+    }
+    return round2(base + delta);
+  }
+  function totalAll(){
+    return round2(state.accounts.reduce((s,a)=> s + sumAccountBalance(a.id), 0));
+  }
+  function fmt(n){
+    const sign = n<0? '-' : '';
+    const v = Math.abs(n);
+    return sign + v.toLocaleString(undefined, {style:'currency', currency:'USD'});
+  }
+  function round2(n){ return Math.round((Number(n)||0)*100)/100 }
+
+  // =============================
+  // Rendering
+  // =============================
+  function renderAccounts(){
+    els.accounts.innerHTML = '';
+    for(const a of state.accounts){
+      const bal = sumAccountBalance(a.id);
+      const card = document.createElement('div');
+      card.className = 'acc-card';
+      card.innerHTML = `
+        <div class="acc-actions">
+          <button class="icon-btn" title="Edit" data-act="edit">✎</button>
+          <button class="icon-btn" title="Delete" data-act="del">🗑️</button>
+        </div>
+        <div class="acc-name">${escapeHtml(a.name||'Untitled')}</div>
+        <div class="acc-balance">${fmt(bal)}</div>
+        <div class="muted" style="margin-top:2px">Start: ${fmt(Number(a.start||0))}</div>
+      `;
+      card.querySelector('[data-act="edit"]').addEventListener('click', ()=> openAccountDialog(a.id));
+      card.querySelector('[data-act="del"]').addEventListener('click', ()=> deleteAccount(a.id));
+      els.accounts.appendChild(card);
+    }
+
+    // Rebuild account selectors
+    const sel = document.getElementById('txAccount'); sel.innerHTML = '';
+    const fsel = els.filterAccount; fsel.innerHTML = '<option value="">All accounts</option>';
+    for(const a of state.accounts){
+      const o1 = document.createElement('option'); o1.value = a.id; o1.textContent = a.name; sel.appendChild(o1);
+      const o2 = document.createElement('option'); o2.value = a.id; o2.textContent = a.name; fsel.appendChild(o2);
+    }
+
+    els.totalBalance.textContent = fmt(totalAll());
+  }
+
+  function renderTransactions(){
+    const list = els.txList; list.innerHTML = '';
+    const q = (document.getElementById('search').value||'').trim().toLowerCase();
+    const fType = document.getElementById('filterType').value;
+    const fAcc = document.getElementById('filterAccount').value;
+    const from = document.getElementById('fromDate').value || null;
+    const to = document.getElementById('toDate').value || null;
+    const sort = document.getElementById('sortBy').value;
+
+    let rows = state.tx.slice();
+    if(q) rows = rows.filter(x=> (x.title||'').toLowerCase().includes(q) || (x.notes||'').toLowerCase().includes(q));
+    if(fType) rows = rows.filter(x=> x.type===fType);
+    if(fAcc) rows = rows.filter(x=> x.accountId===fAcc);
+    if(from){ rows = rows.filter(x=> x.dateISO >= from); }
+    if(to){ rows = rows.filter(x=> x.dateISO <= to); }
+
+    rows.sort((a,b)=>{
+      const signedA = Number(a.amount||0) * (a.type==='income' ? 1 : -1);
+      const signedB = Number(b.amount||0) * (b.type==='income' ? 1 : -1);
+      switch(sort){
+        case 'date_asc': return a.dateISO.localeCompare(b.dateISO);
+        case 'date_desc': return b.dateISO.localeCompare(a.dateISO);
+        case 'amt_desc': return signedB - signedA;
+        case 'amt_asc': return signedA - signedB;
+        case 'title_desc': return (b.title||'').localeCompare(a.title||'');
+        case 'title_asc': default: return (a.title||'').localeCompare(b.title||'');
+      }
+    });
+
+    for(const t of rows){
+      const acc = state.accounts.find(a=>a.id===t.accountId);
+      const row = document.createElement('div'); row.className = 'tx';
+      const bdg = t.budgetId ? (state.budgets||[]).find(b=>b.id===t.budgetId) : null;
+        row.innerHTML = `
+        <div>
+            <div class="tx-title">${escapeHtml(t.title)}</div>
+            <div class="tx-meta">
+            ${t.dateISO} • ${(acc? escapeHtml(acc.name) : '—')} • ${t.type}
+            ${bdg ? ' • Budget: '+escapeHtml(bdg.name) : ''}
+            ${t.notes? ' • '+escapeHtml(t.notes): ''}
+            </div>
+        </div>
+        <div style="text-align:right">
+            <div class="amount ${t.type==='income' ? 'pos':'neg'}">${fmt(Number(t.amount||0) * (t.type==='income'? 1 : -1))}</div>
+            <button class="icon-btn" title="Edit">✎</button>
+        </div>`;
+
+      row.querySelector('button').addEventListener('click', ()=> openTxDialog(t.id));
+      list.appendChild(row);
+    }
+
+    // Update totals in header
+    els.totalBalance.textContent = fmt(totalAll());
+  }
+// iPhone: keep FAB centered above toolbar / keyboard
+(function(){
+  const root = document.documentElement;
+
+  function isiPhoneSafari(){
+    const ua = navigator.userAgent;
+    const isIOS = /iPhone|iPod/.test(ua);
+    const isSafari = /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS/.test(ua);
+    return isIOS && isSafari;
+  }
+
+  function adjustFab(){
+    // When the keyboard is showing, iOS exposes a smaller visual viewport.
+    const vv = window.visualViewport;
+
+    // Extra lift for things that reduce the visible viewport (keyboard, toolbars animating)
+    let extra = 0;
+    if (vv){
+      const hiddenBottom = window.innerHeight - (vv.height + vv.offsetTop);
+      // hiddenBottom can fluctuate; clamp to 0+
+      extra = Math.max(0, Math.round(hiddenBottom));
+    }
+    root.style.setProperty('--fab-extra', extra + 'px');
+
+    // Toolbar estimate: when keyboard is closed on iPhone Safari, give the FAB
+    // a constant buffer so it sits clearly above the bottom toolbar.
+    // (Typical toolbar ~48–54px + some cushion)
+    const toolbarGuess = (isiPhoneSafari() && (!vv || vv.height >= window.innerHeight - 8)) ? 72 : 0;
+    root.style.setProperty('--fab-toolbar', toolbarGuess + 'px');
+  }
+
+  // Listen for changes that affect viewport geometry
+  if (window.visualViewport){
+    visualViewport.addEventListener('resize', adjustFab);
+    visualViewport.addEventListener('scroll',  adjustFab);
+  }
+  window.addEventListener('orientationchange', adjustFab);
+  window.addEventListener('scroll', adjustFab, {passive:true});
+  document.addEventListener('visibilitychange', adjustFab);
+
+  adjustFab();
+})();
+
+  // ===== Budget helpers =====
+function periodStart(dateISO, period){
+  const d = new Date(dateISO);
+  if(period==='weekly'){
+    const day = d.getDay(); // 0 Sun..6 Sat
+    d.setDate(d.getDate() - day); // start Sun
+  } else if(period==='monthly'){
+    d.setDate(1);
+  } else if(period==='yearly'){
+    d.setMonth(0,1);
+  }
+  return d.toISOString().slice(0,10);
+}
+function inSamePeriod(dateISO, refISO, period){
+  return periodStart(dateISO, period) === periodStart(refISO, period);
+}
+function totalIncomeInPeriod(refISO, period){
+  return state.tx
+    .filter(t=>t.type==='income' && inSamePeriod(t.dateISO, refISO, period))
+    .reduce((s,t)=> s + Number(t.amount||0), 0);
+}
+function budgetLimit(b, refISO){
+  if(b.mode==='amount') return Number(b.amount||0);
+  // percent of income in the same period as ref date (use "today")
+  const base = totalIncomeInPeriod(refISO, b.period||'monthly');
+  return base * (Number(b.percent||0)/100);
+}
+function budgetSpent(b, refISO){
+  return state.tx
+    .filter(t=>t.type==='expense' && t.budgetId===b.id && inSamePeriod(t.dateISO, refISO, b.period||'monthly'))
+    .reduce((s,t)=> s + Number(t.amount||0), 0);
+}
+
+  // =============================
+  // Dialog logic — Accounts
+  // =============================
+  const dlgAccount = document.getElementById('dlgAccount');
+  document.getElementById('addAccountBtn').addEventListener('click', ()=> openAccountDialog());
+  document.getElementById('saveAccount').addEventListener('click', (e)=>{
+    e.preventDefault();
+    const name = document.getElementById('accName').value.trim();
+    const start = round2(document.getElementById('accStart').value || 0);
+    if(!name){ alert('Please name the account.'); return; }
+    if(editingAccId){
+      const a = state.accounts.find(x=>x.id===editingAccId); if(a){ a.name = name; a.start = start; }
+    } else {
+      state.accounts.push({id: uid(), name, start});
+    }
+    saveState(); renderAccounts(); dlgAccount.close(); editingAccId = null;
+  });
+
+  function openAccountDialog(id){
+    editingAccId = id||null;
+    document.getElementById('accDlgTitle').textContent = id? 'Edit Account' : 'Add Account';
+    document.getElementById('accName').value = '';
+    document.getElementById('accStart').value = '';
+    if(id){
+      const a = state.accounts.find(x=>x.id===id);
+      if(a){
+        document.getElementById('accName').value = a.name||'';
+        document.getElementById('accStart').value = Number(a.start||0);
+      }
+    }
+    dlgAccount.showModal();
+  }
+  function deleteAccount(id){
+    const a = state.accounts.find(x=>x.id===id); if(!a) return;
+    if(!confirm(`Delete account "${a.name}"? Transactions will remain but become unassigned.`)) return;
+    // Remove account reference from tx
+    for(const t of state.tx){ if(t.accountId===id) t.accountId = ''; }
+    const i = state.accounts.findIndex(x=>x.id===id); if(i>=0) state.accounts.splice(i,1);
+    saveState(); renderAccounts(); renderTransactions();
+  }
+
+  // =============================
+// Dialog logic — Budgets
+// =============================
+const dlgBudget = document.getElementById('dlgBudget');
+const addBudgetBtn = document.getElementById('addBudgetBtn');
+const saveBudgetBtn = document.getElementById('saveBudget');
+
+const bdgName = document.getElementById('bdgName');
+const bdgPeriod = document.getElementById('bdgPeriod');
+const bdgMode = document.getElementById('bdgMode');
+const bdgAmount = document.getElementById('bdgAmount');
+const bdgPercent = document.getElementById('bdgPercent');
+const bdgAmountWrap = document.getElementById('bdgAmountWrap');
+const bdgPercentWrap = document.getElementById('bdgPercentWrap');
+
+let editingBudgetId = null;
+
+addBudgetBtn.addEventListener('click', ()=> openBudgetDialog());
+
+bdgMode.addEventListener('change', ()=>{
+  const m = bdgMode.value;
+  bdgAmountWrap.style.display = (m==='amount') ? '' : 'none';
+  bdgPercentWrap.style.display = (m==='percent') ? '' : 'none';
+});
+
+saveBudgetBtn.addEventListener('click', (e)=>{
+  e.preventDefault();
+  const name = bdgName.value.trim();
+  const period = bdgPeriod.value || 'monthly';
+  const mode = bdgMode.value || 'amount';
+  const amount = round2(bdgAmount.value || 0);
+  const percent = Number(bdgPercent.value || 0);
+
+  if(!name){ alert('Please name the budget.'); return; }
+  if(mode==='amount' && !amount){ alert('Please enter an amount.'); return; }
+  if(mode==='percent' && !percent){ alert('Please enter a percent.'); return; }
+
+  if(editingBudgetId){
+    const b = state.budgets.find(x=>x.id===editingBudgetId);
+    if(b){ Object.assign(b, {name, period, mode, amount, percent}); }
+  } else {
+    state.budgets.push({ id: uid(), name, period, mode, amount, percent });
+  }
+  saveState();
+  renderBudgets();
+  populateBudgetSelect(); // keep tx dialog budget list fresh
+  dlgBudget.close();
+  editingBudgetId = null;
+});
+
+function openBudgetDialog(id){
+  editingBudgetId = id||null;
+  document.getElementById('budgetDlgTitle').textContent = id? 'Edit Budget' : 'Add Budget';
+  bdgName.value = '';
+  bdgPeriod.value = 'monthly';
+  bdgMode.value = 'amount';
+  bdgAmountWrap.style.display = '';
+  bdgPercentWrap.style.display = 'none';
+  bdgAmount.value = '';
+  bdgPercent.value = '';
+
+  if(id){
+    const b = state.budgets.find(x=>x.id===id);
+    if(b){
+      bdgName.value = b.name||'';
+      bdgPeriod.value = b.period||'monthly';
+      bdgMode.value = b.mode||'amount';
+      bdgAmount.value = b.amount||'';
+      bdgPercent.value = b.percent||'';
+      bdgAmountWrap.style.display = (b.mode==='amount') ? '' : 'none';
+      bdgPercentWrap.style.display = (b.mode==='percent') ? '' : 'none';
+    }
+  }
+  dlgBudget.showModal();
+}
+
+function deleteBudget(id){
+  const b = state.budgets.find(x=>x.id===id); if(!b) return;
+  if(!confirm(`Delete budget "${b.name}"? Existing transactions keep their amounts but lose this budget tag.`)) return;
+  for(const t of state.tx){ if(t.budgetId===id) t.budgetId = ''; }
+  const i = state.budgets.findIndex(x=>x.id===id); if(i>=0) state.budgets.splice(i,1);
+  saveState(); renderBudgets(); populateBudgetSelect(); renderTransactions();
+}
+
+function renderBudgets(){
+  const wrap = document.getElementById('budgets'); if(!wrap) return;
+  wrap.innerHTML = '';
+  const todayISO = (new Date()).toISOString().slice(0,10);
+  for(const b of state.budgets || []){
+    const cap = budgetLimit(b, todayISO);
+    const used = budgetSpent(b, todayISO);
+    const pct = cap>0 ? Math.min(100, Math.round((used/cap)*100)) : 0;
+    const pill = document.createElement('div');
+    pill.className = 'budget-pill';
+    pill.innerHTML = `
+      <strong>${escapeHtml(b.name)}</strong>
+      <span class="muted">${b.mode==='amount' ? fmt(cap) : (Number(b.percent||0)+'% of income')}</span>
+      <div class="bar"><span style="width:${pct}%; background:${pct<85?'var(--accent-2)':'var(--red)'}"></span></div>
+      <span>${fmt(used)} / ${fmt(cap)}</span>
+      <button class="icon-btn" title="Edit">✎</button>
+      <button class="icon-btn" title="Delete">🗑</button>
+    `;
+    const [editBtn, delBtn] = pill.querySelectorAll('button');
+    editBtn.addEventListener('click', ()=> openBudgetDialog(b.id));
+    delBtn.addEventListener('click', ()=> deleteBudget(b.id));
+    wrap.appendChild(pill);
+  }
+}
+
+  // =============================
+  // Dialog logic — Transactions
+  // =============================
+  const dlgTx = document.getElementById('dlgTx');
+  const tabExpense = document.getElementById('tabExpense');
+  const tabIncome = document.getElementById('tabIncome');
+  const deleteTxBtn = document.getElementById('deleteTxBtn');
+
+    // Recurring UI bindings
+  const txRepeat       = document.getElementById('txRepeat');
+  const repeatRow      = document.getElementById('repeatRow');
+  const repeatEndRow   = document.getElementById('repeatEndRow');
+  const txFreq         = document.getElementById('txFreq');
+  const txInterval     = document.getElementById('txInterval');
+  const txEndMode      = document.getElementById('txEndMode');
+  const txEndCount     = document.getElementById('txEndCount');
+  const txEndDate      = document.getElementById('txEndDate');
+  const txEndCountWrap = document.getElementById('txEndCountWrap');
+  const txEndDateWrap  = document.getElementById('txEndDateWrap');
+
+  // Budget field inside Tx dialog
+const txBudgetRow = document.getElementById('txBudgetRow');
+const txBudgetSel = document.getElementById('txBudget');
+
+function populateBudgetSelect(){
+  txBudgetSel.innerHTML = '<option value="">— No budget —</option>';
+  for(const b of (state.budgets||[])){
+    const opt = document.createElement('option');
+    opt.value = b.id;
+    opt.textContent = b.name;
+    txBudgetSel.appendChild(opt);
+  }
+}
+
+function updateBudgetVisibility(){
+  // only show budget picker for Expenses and when there are budgets
+  const isExpense = tabExpense.classList.contains('active');
+  const hasBudgets = (state.budgets||[]).length > 0;
+  txBudgetRow.style.display = (isExpense && hasBudgets) ? 'grid' : 'none';
+}
+
+  if (txRepeat) {
+    txRepeat.addEventListener('change', ()=>{
+      const on = txRepeat.checked;
+      repeatRow.style.display    = on ? 'grid' : 'none';
+      repeatEndRow.style.display = on ? 'grid' : 'none';
+    });
+  }
+  if (txEndMode) {
+    txEndMode.addEventListener('change', ()=>{
+      const mode = txEndMode.value;
+      txEndCountWrap.style.display = (mode==='after') ? '' : 'none';
+      txEndDateWrap.style.display  = (mode==='on')    ? '' : 'none';
+    });
+  }
+
+tabExpense.addEventListener('click', ()=>{
+  tabExpense.classList.add('active'); tabIncome.classList.remove('active');
+  updateBudgetVisibility();
+});
+tabIncome.addEventListener('click', ()=>{
+  tabIncome.classList.add('active'); tabExpense.classList.remove('active');
+  updateBudgetVisibility();
+});
+
+
+  document.getElementById('addTxBtn').addEventListener('click', ()=> openTxDialog());
+  document.getElementById('saveTx').addEventListener('click', (e)=>{
+    e.preventDefault();
+    const type = tabIncome.classList.contains('active')? 'income' : 'expense';
+    const title = document.getElementById('txTitle').value.trim();
+    const amount = round2(document.getElementById('txAmount').value || 0);
+    const dateISO = document.getElementById('txDate').value || isoToday();
+    const accountId = document.getElementById('txAccount').value || '';
+    const notes = document.getElementById('txNotes').value.trim();
+        // Recurring fields
+    const wantsRepeat = (document.getElementById('txRepeat')?.checked) || false;
+    const freq        = (document.getElementById('txFreq')?.value) || 'monthly';
+    const interval    = Math.max(1, Number((document.getElementById('txInterval')?.value) || 1));
+    const endMode     = (document.getElementById('txEndMode')?.value) || 'never';
+    const endCount    = Number((document.getElementById('txEndCount')?.value) || 0);
+    const endDateISO  = (document.getElementById('txEndDate')?.value) || '';
+
+
+    if(!title){ alert('Please enter a title.'); return; }
+    if(!amount){ alert('Please enter an amount.'); return; }
+
+    // Read budget select FIRST
+    const budgetId = (document.getElementById('txBudget')?.value) || '';
+
+    if (editingTxId){
+    const t = state.tx.find(x=>x.id===editingTxId);
+    if (t){
+        Object.assign(t, { type, title, amount, dateISO, accountId, notes, budgetId });
+    }
+    } else {
+    // Create initial entry
+    const newId = uid();
+    state.tx.push({ id: newId, type, title, amount, dateISO, accountId, notes, budgetId });
+
+      // If repeating, store a rule and let the engine materialize future ones
+      if (wantsRepeat) {
+        // Ensure state.recurring exists (if you added it per step 3a)
+        if (!Array.isArray(state.recurring)) state.recurring = [];
+        const rid  = uid();
+        const rule = { freq, interval };
+        const end  = { mode: endMode };
+        if (endMode==='after') end.count = endCount;
+        if (endMode==='on' && endDateISO) end.untilISO = endDateISO;
+
+        state.recurring.push({
+            id: rid,
+            template: { type, title, amount, accountId, notes, budgetId }, // include budgetId
+            startISO: dateISO,
+            rule,
+            end,
+            nextISO: dateISO,
+            createdCount: 0
+            });
+
+      }
+    }
+    saveState();
+    // If you added applyRecurring() in step 3c, keep the next line; otherwise remove it.
+    if (typeof applyRecurring === 'function') applyRecurring();
+    renderTransactions(); renderAccounts(); renderBudgets(); dlgTx.close(); editingTxId = null;
+  });
+
+  deleteTxBtn.addEventListener('click', ()=>{
+    if(!editingTxId) return;
+    const i = state.tx.findIndex(x=>x.id===editingTxId);
+    if(i>=0){ if(confirm('Delete this entry?')){ state.tx.splice(i,1); saveState(); renderTransactions(); renderAccounts(); renderBudgets(); dlgTx.close(); editingTxId=null; } }
+  });
+
+  function openTxDialog(id){
+    editingTxId = id||null;
+    document.getElementById('txDlgTitle').textContent = id? 'Edit Entry' : 'Add Entry';
+    setType('expense');
+    document.getElementById('txTitle').value = '';
+    document.getElementById('txAmount').value = '';
+    document.getElementById('txDate').value = isoToday();
+    document.getElementById('txAccount').value = state.accounts[0]?.id || '';
+    document.getElementById('txNotes').value = '';
+        // Reset recurring UI to defaults
+    if (typeof repeatRow !== 'undefined') {
+      // safe-guard if HTML controls exist
+      txRepeat.checked = false;
+      repeatRow.style.display    = 'none';
+      repeatEndRow.style.display = 'none';
+      txFreq.value = 'monthly';
+      txInterval.value = '1';
+      txEndMode.value = 'never';
+      txEndCountWrap.style.display = 'none';
+      txEndDateWrap.style.display  = 'none';
+      txEndCount.value = '12';
+      txEndDate.value  = '';
+    }
+
+    deleteTxBtn.style.display = id? '' : 'none';
+
+    if(id){
+      const t = state.tx.find(x=>x.id===id);
+      if(t){
+        setType(t.type);
+        document.getElementById('txTitle').value = t.title||'';
+        document.getElementById('txAmount').value = Number(t.amount||0);
+        document.getElementById('txDate').value = t.dateISO||isoToday();
+        document.getElementById('txAccount').value = t.accountId||'';
+        document.getElementById('txNotes').value = t.notes||'';
+        populateBudgetSelect();
+        txBudgetSel.value = t.budgetId || '';
+        
+      }
+    }
+
+    updateBudgetVisibility();
+    dlgTx.showModal();
+
+  }
+
+  function setType(t){
+    if(t==='income'){
+      tabIncome.classList.add('active'); tabExpense.classList.remove('active');
+    } else {
+      tabExpense.classList.add('active'); tabIncome.classList.remove('active');
+    }
+  }
+
+  // =============================
+  // Controls & events
+  // =============================
+  document.getElementById('toggleControls').addEventListener('click', ()=>{
+    const el = document.getElementById('controls');
+    el.style.display = (el.style.display==='none'||!el.style.display)? 'block' : 'none';
+  });
+  for(const id of ['search','filterType','filterAccount','fromDate','toDate','sortBy']){
+    document.getElementById(id).addEventListener('input', renderTransactions);
+    document.getElementById(id).addEventListener('change', renderTransactions);
+  }
+
+  // Export/Import for simple backups
+  document.getElementById('exportBtn').addEventListener('click', ()=>{
+    const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'finance-tracker-backup.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+  const importInput = document.getElementById('importFile');
+  document.getElementById('importBtn').addEventListener('click', ()=> importInput.click());
+  importInput.addEventListener('change', async (e)=>{
+    const f = e.target.files?.[0]; if(!f) return;
+    const text = await f.text();
+    try{
+      const data = JSON.parse(text);
+      if(confirm('Import will replace current data. Continue?')){
+        state.accounts = Array.isArray(data.accounts)? data.accounts : [];
+        state.tx = Array.isArray(data.tx)? data.tx : [];
+        state.budgets = Array.isArray(data.budgets)? data.budgets : [];
+        saveState(); renderAccounts(); renderBudgets(); renderTransactions();
+      }
+    }catch(err){ alert('Invalid backup file.'); }
+  });
+
+  // =============================
+  // Utilities
+  // =============================
+  function escapeHtml(s){
+    return String(s||'').replace(/[&<>"']/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
+  }
+
+  function addDays(iso, n){
+  const d = new Date(iso); d.setDate(d.getDate()+n);
+  return d.toISOString().slice(0,10);
+}
+function addMonths(iso, n){
+  const d = new Date(iso);
+  d.setMonth(d.getMonth()+n);
+  // keep same day where possible
+  const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function nextOccurrenceISO(currISO, rule){
+  const {freq, interval} = rule;
+  if(freq==='daily')  return addDays(currISO, Number(interval||1));
+  if(freq==='weekly') return addDays(currISO, 7*Number(interval||1));
+  return addMonths(currISO, Number(interval||1)); // monthly default
+}
+function isoToday(){
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+
+function applyRecurring(){
+  const today = isoToday();
+  const last = state.lastAutoRunISO || '2000-01-01';
+
+  // Only run forward
+  const endRunDate = today;
+
+  for(const r of state.recurring){
+    // Initialize counters
+    if(typeof r.createdCount!=='number') r.createdCount = 0;
+
+    // Ensure nextISO exists
+    if(!r.nextISO){
+      r.nextISO = r.startISO;
+    }
+
+    // Generate all occurrences due up to endRunDate
+    while(r.nextISO && r.nextISO <= endRunDate){
+      // Check end conditions
+      const mode = r.end?.mode || 'never';
+      if(mode==='after' && r.createdCount >= (Number(r.end.count)||0)) break;
+      if(mode==='on' && r.end.untilISO && r.nextISO > r.end.untilISO) break;
+
+      // Avoid duplicates: check if we already have a tx for (recurId + date)
+      const exists = state.tx.some(t => t.recurId===r.id && t.dateISO===r.nextISO);
+      if(!exists){
+        state.tx.push({
+          id: uid(),
+          recurId: r.id,
+          type: r.template.type,
+          title: r.template.title,
+          amount: round2(r.template.amount),
+          dateISO: r.nextISO,
+          accountId: r.template.accountId,
+          notes: r.template.notes || '',
+          budgetId: r.template.budgetId || '' 
+        });
+        r.createdCount++;
+      }
+
+      // Advance to next due date
+      r.nextISO = nextOccurrenceISO(r.nextISO, r.rule);
+
+      // Respect end conditions again on loop
+      if(mode==='on' && r.end.untilISO && r.nextISO > r.end.untilISO) break;
+    }
+  }
+
+  state.lastAutoRunISO = endRunDate;
+  saveState();
+}
+
+  // =============================
+  // Init
+  // =============================
+  loadState();
+  if (typeof applyRecurring === 'function') applyRecurring();  // generate any due repeats
+  renderAccounts();
+  renderBudgets();
+  renderTransactions();
+
+  // =============================
+  // 🔄 Firestore migration notes (future):
+  // 1) Replace localStorage calls with Firestore reads/writes under collection path like:
+  //    users/{uid}/accounts and users/{uid}/transactions
+  // 2) On each mutation (add/edit/delete), await addDoc/setDoc/deleteDoc then update local state.
+  // 3) For real-time sync across devices, use onSnapshot(query(...)) to hydrate state and re-render.
+  // 4) Use serverTimestamp() and toDate() for dates; store date as YYYY-MM-DD or a Timestamp.
+  // 5) Generate IDs via Firestore (doc().id) instead of uid(). Keep the same data shape.
+  // 6) Consider security rules so each user only reads/writes their own docs.
+  // 7) When migrating, keep the export/import as a local backup option.
+  // =============================
+  </script>
+</body>
+</html>
